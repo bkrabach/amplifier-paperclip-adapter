@@ -1,5 +1,6 @@
 """Tests for CLI argument parsing in main.py."""
 
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
@@ -178,3 +179,85 @@ class TestRunBridge:
             approval_system=ANY,
             session_cwd=Path("/workspace/my-project"),
         )
+
+
+class TestRunBridgeErrors:
+    @pytest.mark.asyncio
+    async def test_bundle_not_found_emits_error(self) -> None:
+        """Verifies FileNotFoundError propagates from run_bridge when bundle is not found."""
+        from amplifier_paperclip_bridge.main import run_bridge
+
+        mock_session = _make_mock_session()
+        mock_prepared = _make_mock_prepared(mock_session)
+        mock_bundle = _make_mock_bundle(mock_prepared)  # noqa: F841
+
+        with (
+            patch(
+                "amplifier_paperclip_bridge.main.load_bundle",
+                AsyncMock(side_effect=FileNotFoundError("Bundle 'nope' not found")),
+            ),
+            patch("amplifier_paperclip_bridge.main._write_event"),
+        ):
+            with pytest.raises(FileNotFoundError, match="Bundle 'nope' not found"):
+                await run_bridge(
+                    bundle_uri="nope",
+                    cwd=None,
+                    timeout=300,
+                    prompt="Hello",
+                )
+
+    @pytest.mark.asyncio
+    async def test_timeout_raises(self) -> None:
+        """Verifies asyncio.TimeoutError propagates when session execution exceeds timeout."""
+        from amplifier_paperclip_bridge.main import run_bridge
+
+        mock_session = _make_mock_session()
+
+        async def slow_execute(*args: object, **kwargs: object) -> None:
+            await asyncio.sleep(10)
+
+        mock_session.execute = AsyncMock(side_effect=slow_execute)
+        mock_prepared = _make_mock_prepared(mock_session)
+        mock_bundle = _make_mock_bundle(mock_prepared)
+
+        with (
+            patch(
+                "amplifier_paperclip_bridge.main.load_bundle",
+                AsyncMock(return_value=mock_bundle),
+            ),
+            patch("amplifier_paperclip_bridge.main._write_event"),
+        ):
+            with pytest.raises(asyncio.TimeoutError):
+                await run_bridge(
+                    bundle_uri="amplifier-dev",
+                    cwd=None,
+                    timeout=1,
+                    prompt="Hello",
+                )
+
+    @pytest.mark.asyncio
+    async def test_session_error_propagates(self) -> None:
+        """Verifies RuntimeError from session.execute propagates from run_bridge."""
+        from amplifier_paperclip_bridge.main import run_bridge
+
+        mock_session = _make_mock_session()
+        mock_session.execute = AsyncMock(
+            side_effect=RuntimeError("orchestrator crashed")
+        )
+        mock_prepared = _make_mock_prepared(mock_session)
+        mock_bundle = _make_mock_bundle(mock_prepared)
+
+        with (
+            patch(
+                "amplifier_paperclip_bridge.main.load_bundle",
+                AsyncMock(return_value=mock_bundle),
+            ),
+            patch("amplifier_paperclip_bridge.main._write_event"),
+        ):
+            with pytest.raises(RuntimeError, match="orchestrator crashed"):
+                await run_bridge(
+                    bundle_uri="amplifier-dev",
+                    cwd=None,
+                    timeout=300,
+                    prompt="Hello",
+                )
