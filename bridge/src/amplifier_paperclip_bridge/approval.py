@@ -22,16 +22,16 @@ class HeadlessApprovalSystem:
         self,
         prompt: str,
         options: list[str],
-        timeout: float,
-        default: Literal["allow", "deny"],
+        _timeout: float,
+        _default: Literal["allow", "deny"],
     ) -> str:
         """Return first option or "allow" for empty options; log the decision.
 
         Args:
             prompt: Question describing what needs approval
             options: Available choices to select from
-            timeout: Seconds to wait (unused in headless mode)
-            default: Action on timeout (unused in headless mode)
+            _timeout: Seconds to wait (unused in headless mode)
+            _default: Action on timeout (unused in headless mode)
 
         Returns:
             options[0] if options is non-empty, else "allow"

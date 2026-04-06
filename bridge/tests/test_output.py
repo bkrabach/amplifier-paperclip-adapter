@@ -48,7 +48,7 @@ class TestEmitContentDelta:
 
 class TestEmitToolStart:
     def test_tool_start_has_fields(self) -> None:
-        result = emit_tool_start(tool="bash", input='{"command": "ls"}')
+        result = emit_tool_start(tool="bash", input_data='{"command": "ls"}')
         data = json.loads(result)
         assert data["type"] == "tool_start"
         assert data["tool"] == "bash"

@@ -13,8 +13,8 @@ class TestHeadlessApprovalSystem:
         result = await system.request_approval(
             prompt="Allow this action?",
             options=["allow", "deny"],
-            timeout=30.0,
-            default="allow",
+            _timeout=30.0,
+            _default="allow",
         )
         assert result == "allow"
 
@@ -25,8 +25,8 @@ class TestHeadlessApprovalSystem:
         result = await system.request_approval(
             prompt="What should we do?",
             options=["proceed", "skip", "abort"],
-            timeout=30.0,
-            default="allow",
+            _timeout=30.0,
+            _default="allow",
         )
         assert result == "proceed"
 
@@ -37,8 +37,8 @@ class TestHeadlessApprovalSystem:
         result = await system.request_approval(
             prompt="No options provided",
             options=[],
-            timeout=30.0,
-            default="allow",
+            _timeout=30.0,
+            _default="allow",
         )
         assert result == "allow"
 
@@ -50,8 +50,8 @@ class TestHeadlessApprovalSystem:
         await system.request_approval(
             prompt=prompt,
             options=["allow", "deny"],
-            timeout=30.0,
-            default="allow",
+            _timeout=30.0,
+            _default="allow",
         )
         assert len(system.decisions) == 1
         assert system.decisions[0]["prompt"] == prompt

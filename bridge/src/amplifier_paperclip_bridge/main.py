@@ -84,14 +84,14 @@ def _make_hook_handler(event_name: str) -> Any:
         elif event_name == "tool:pre":
             tool = data.get("tool", "")
             input_data = data.get("input", "")
-            _write_event(emit_tool_start(tool=str(tool), input=str(input_data)))
+            _write_event(emit_tool_start(tool=str(tool), input_data=str(input_data)))
         elif event_name == "tool:post":
             tool = data.get("tool", "")
             output = str(data.get("output", ""))
             output = output[:_MAX_TOOL_OUTPUT_CHARS]
             _write_event(emit_tool_end(tool=str(tool), output=output))
         else:
-            logger.warning("Unhandled event type in hook handler: %s", event_name)
+            raise RuntimeError(f"Unhandled event type in hook handler: {event_name}")
 
     return handler
 
@@ -128,7 +128,7 @@ async def run_bridge(
     _write_event(
         emit_init(
             session_id=session.session_id,
-            model="",
+            model="bundle-default",
             bundle=bundle_uri,
         )
     )

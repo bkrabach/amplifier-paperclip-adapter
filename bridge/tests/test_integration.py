@@ -61,6 +61,7 @@ class TestBridgeCLI:
             input="do something",
         )
         assert result.returncode == 1
+        assert result.stdout.strip(), "Expected JSONL error output on stdout"
         last_line = result.stdout.strip().splitlines()[-1]
         event = json.loads(last_line)
         assert event["type"] == "error"

@@ -16,9 +16,9 @@ def emit_content_delta(*, text: str) -> str:
     return json.dumps({"type": "content_delta", "text": text})
 
 
-def emit_tool_start(*, tool: str, input: str) -> str:  # noqa: A002
+def emit_tool_start(*, tool: str, input_data: str) -> str:
     """Return a JSON string for a tool start event."""
-    return json.dumps({"type": "tool_start", "tool": tool, "input": input})
+    return json.dumps({"type": "tool_start", "tool": tool, "input": input_data})
 
 
 def emit_tool_end(*, tool: str, output: str) -> str:

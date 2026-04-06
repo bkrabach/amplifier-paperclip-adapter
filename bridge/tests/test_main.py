@@ -187,10 +187,6 @@ class TestRunBridgeErrors:
         """Verifies FileNotFoundError propagates from run_bridge when bundle is not found."""
         from amplifier_paperclip_bridge.main import run_bridge
 
-        mock_session = _make_mock_session()
-        mock_prepared = _make_mock_prepared(mock_session)
-        mock_bundle = _make_mock_bundle(mock_prepared)  # noqa: F841
-
         with (
             patch(
                 "amplifier_paperclip_bridge.main.load_bundle",
