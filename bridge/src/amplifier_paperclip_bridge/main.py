@@ -1,9 +1,31 @@
 """CLI entry point for amplifier-paperclip-bridge."""
 
 import argparse
+import asyncio
+import logging
 import sys
+from pathlib import Path
+from typing import Any
+
+from amplifier_foundation import load_bundle
 
 from amplifier_paperclip_bridge import __version__
+from amplifier_paperclip_bridge.approval import HeadlessApprovalSystem
+from amplifier_paperclip_bridge.output import (
+    emit_content_delta,
+    emit_error,
+    emit_init,
+    emit_result,
+    emit_tool_end,
+    emit_tool_start,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _write_event(line: str) -> None:
+    """Print a JSONL event line to stdout."""
+    print(line, flush=True)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -43,17 +65,125 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _make_hook_handler(event_name: str) -> Any:
+    """Factory returning a sync handler for the given event type.
+
+    Args:
+        event_name: The event constant (e.g., "content_block:delta").
+
+    Returns:
+        A callable that handles the event and emits the appropriate JSONL.
+    """
+
+    def handler(event: str, data: dict[str, Any]) -> None:
+        if event_name == "content_block:delta":
+            text = data.get("text", "")
+            _write_event(emit_content_delta(text=text))
+        elif event_name == "tool:pre":
+            tool = data.get("tool", "")
+            input_data = data.get("input", "")
+            _write_event(emit_tool_start(tool=str(tool), input=str(input_data)))
+        elif event_name == "tool:post":
+            tool = data.get("tool", "")
+            output = str(data.get("output", ""))
+            output = output[:2000]
+            _write_event(emit_tool_end(tool=str(tool), output=output))
+
+    return handler
+
+
+async def run_bridge(
+    *,
+    bundle_uri: str,
+    cwd: str | None,
+    timeout: int,
+    prompt: str,
+) -> None:
+    """Run an Amplifier session and emit JSONL events.
+
+    Args:
+        bundle_uri: Bundle name, local path, or git+https URL.
+        cwd: Working directory for the session (uses current dir if None).
+        timeout: Maximum seconds to wait for session execution.
+        prompt: The user prompt to execute.
+    """
+    import amplifier_core.events as events
+
+    session_cwd = Path(cwd) if cwd else Path.cwd()
+
+    bundle = await load_bundle(bundle_uri)
+    prepared = await bundle.prepare()
+
+    approval = HeadlessApprovalSystem()
+    session = await prepared.create_session(
+        approval_system=approval,
+        session_cwd=session_cwd,
+    )
+
+    _write_event(
+        emit_init(
+            session_id=session.session_id,
+            model="",
+            bundle=bundle_uri,
+        )
+    )
+
+    session.coordinator.hooks.register(
+        events.CONTENT_BLOCK_DELTA,
+        _make_hook_handler(events.CONTENT_BLOCK_DELTA),
+    )
+    session.coordinator.hooks.register(
+        events.TOOL_PRE,
+        _make_hook_handler(events.TOOL_PRE),
+    )
+    session.coordinator.hooks.register(
+        events.TOOL_POST,
+        _make_hook_handler(events.TOOL_POST),
+    )
+
+    async with session:
+        result = await asyncio.wait_for(session.execute(prompt), timeout=timeout)
+
+    _write_event(
+        emit_result(
+            session_id=session.session_id,
+            response=result,
+            usage=None,
+            cost_usd=None,
+        )
+    )
+
+
 def cli_main() -> None:
     """Main entry point for the amplifier-paperclip-bridge CLI."""
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        stream=sys.stderr,
+    )
+
     args = parse_args()
 
     prompt = sys.stdin.read()
     if not prompt.strip():
-        print("Error: prompt cannot be empty", file=sys.stderr)
+        _write_event(emit_error("No prompt provided", code="SESSION_ERROR"))
         sys.exit(1)
 
-    # Placeholder for session execution (Task 6)
-    _ = args  # bundle, cwd, timeout will be used in Task 6
+    try:
+        asyncio.run(
+            run_bridge(
+                bundle_uri=args.bundle,
+                cwd=args.cwd,
+                timeout=args.timeout,
+                prompt=prompt,
+            )
+        )
+    except asyncio.TimeoutError:
+        _write_event(emit_error("Session timed out", code="TIMEOUT"))
+        sys.exit(1)
+    except Exception as e:
+        _write_event(emit_error(str(e), code="SESSION_ERROR"))
+        sys.exit(1)
 
 
 if __name__ == "__main__":

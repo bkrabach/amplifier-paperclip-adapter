@@ -3,7 +3,6 @@ name = "amplifier-paperclip-bridge"
 version = "0.1.0"
 description = "Python bridge connecting Amplifier sessions to Paperclip heartbeats via JSONL"
 license = "MIT"
-readme = "../README.md"
 requires-python = ">=3.11"
 authors = [
     { name = "Ben Krabach" },
