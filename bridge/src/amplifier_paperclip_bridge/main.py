@@ -22,6 +22,8 @@ from amplifier_paperclip_bridge.output import (
 
 logger = logging.getLogger(__name__)
 
+_MAX_TOOL_OUTPUT_CHARS = 2000
+
 
 def _write_event(line: str) -> None:
     """Print a JSONL event line to stdout."""
@@ -86,8 +88,10 @@ def _make_hook_handler(event_name: str) -> Any:
         elif event_name == "tool:post":
             tool = data.get("tool", "")
             output = str(data.get("output", ""))
-            output = output[:2000]
+            output = output[:_MAX_TOOL_OUTPUT_CHARS]
             _write_event(emit_tool_end(tool=str(tool), output=output))
+        else:
+            logger.warning("Unhandled event type in hook handler: %s", event_name)
 
     return handler
 
@@ -107,6 +111,7 @@ async def run_bridge(
         timeout: Maximum seconds to wait for session execution.
         prompt: The user prompt to execute.
     """
+    # Deferred to avoid module-level import side effects during test patching
     import amplifier_core.events as events
 
     session_cwd = Path(cwd) if cwd else Path.cwd()
