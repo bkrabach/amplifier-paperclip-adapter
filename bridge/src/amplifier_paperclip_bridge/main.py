@@ -66,6 +66,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=300,
         help="Maximum seconds to wait for the session to complete.",
     )
+    parser.add_argument(
+        "--prompt",
+        default=None,
+        help=(
+            "Prompt to execute. When provided, stdin is not read. "
+            "Useful for debugging or when stdin piping is unreliable."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -210,7 +218,11 @@ def cli_main() -> None:
 
     args = parse_args()
 
-    prompt = sys.stdin.read()
+    if args.prompt is not None:
+        prompt = args.prompt
+    else:
+        prompt = sys.stdin.read()
+
     if not prompt.strip():
         _write_event(emit_error("No prompt provided", code="SESSION_ERROR"))
         sys.exit(1)

@@ -65,3 +65,34 @@ class TestBridgeCLI:
         last_line = result.stdout.strip().splitlines()[-1]
         event = json.loads(last_line)
         assert event["type"] == "error"
+
+    def test_prompt_flag_bypasses_stdin(self) -> None:
+        """--prompt flag passes the prompt without reading stdin.
+
+        When --prompt is provided and stdin is empty, the bridge should NOT emit
+        a 'No prompt provided' error -- it should proceed to run the bundle
+        (which may fail for other reasons such as a bad bundle name, but the
+        prompt-reading step must succeed).
+        """
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "amplifier_paperclip_bridge.main",
+                "--prompt",
+                "say hello",
+                "--bundle",
+                "this-bundle-does-not-exist-xyz-123",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            stdin=subprocess.DEVNULL,
+        )
+        assert result.returncode == 1
+        assert result.stdout.strip(), "Expected JSONL error output on stdout"
+        last_line = result.stdout.strip().splitlines()[-1]
+        event = json.loads(last_line)
+        assert event["type"] == "error"
+        # The error must NOT be "No prompt provided" -- it should be a bundle error
+        assert "prompt" not in event.get("message", "").lower()

@@ -1,6 +1,7 @@
 """Tests for CLI argument parsing in main.py."""
 
 import asyncio
+import io
 import json
 from pathlib import Path
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
@@ -12,11 +13,22 @@ from amplifier_paperclip_bridge.main import parse_args
 
 class TestParseArgs:
     def test_defaults(self) -> None:
-        """Verifies default bundle="amplifier-dev", cwd=None, timeout=300."""
+        """Verifies default bundle="amplifier-dev", cwd=None, timeout=300, prompt=None."""
         args = parse_args([])
         assert args.bundle == "amplifier-dev"
         assert args.cwd is None
         assert args.timeout == 300
+        assert args.prompt is None
+
+    def test_custom_prompt(self) -> None:
+        """--prompt 'my prompt' sets args.prompt."""
+        args = parse_args(["--prompt", "my prompt"])
+        assert args.prompt == "my prompt"
+
+    def test_prompt_multiword(self) -> None:
+        """--prompt with a multi-word string preserves the full string."""
+        args = parse_args(["--prompt", "say hello to the world"])
+        assert args.prompt == "say hello to the world"
 
     def test_custom_bundle(self) -> None:
         """--bundle my-bundle sets args.bundle."""
@@ -205,7 +217,9 @@ class TestRunBridge:
         # Start with empty mount_plan (no providers)
         mock_prepared.mount_plan = {}
 
-        provider_config = [{"module": "provider-anthropic", "config": {"api_key": "test-key"}}]
+        provider_config = [
+            {"module": "provider-anthropic", "config": {"api_key": "test-key"}}
+        ]
         mock_settings = MagicMock()
         mock_settings.get_provider_overrides.return_value = provider_config
 
@@ -313,3 +327,93 @@ class TestRunBridgeErrors:
                     timeout=300,
                     prompt="Hello",
                 )
+
+
+class TestCliMain:
+    def test_prompt_flag_used_when_stdin_empty(self) -> None:
+        """cli_main passes --prompt value to run_bridge even when stdin is empty."""
+        from amplifier_paperclip_bridge.main import cli_main
+
+        captured: list[str] = []
+
+        with (
+            patch("sys.argv", ["bridge", "--prompt", "say hello"]),
+            patch("sys.stdin", io.StringIO("")),
+            patch(
+                "amplifier_paperclip_bridge.main.asyncio.run",
+                side_effect=lambda coro: coro.close() or None,
+            ),
+            patch(
+                "amplifier_paperclip_bridge.main.run_bridge",
+                return_value=None,
+            ) as mock_run_bridge,
+            patch(
+                "amplifier_paperclip_bridge.main._write_event",
+                side_effect=captured.append,
+            ),
+        ):
+            # Should NOT raise SystemExit(1) for "No prompt provided"
+            try:
+                cli_main()
+            except SystemExit as exc:
+                pytest.fail(
+                    f"cli_main raised SystemExit({exc.code}) -- should not error "
+                    f"when --prompt is given. Output: {captured}"
+                )
+
+        # run_bridge should have been called with the CLI prompt, not empty stdin
+        mock_run_bridge.assert_called_once()
+        _, kwargs = mock_run_bridge.call_args
+        assert kwargs.get("prompt") == "say hello"
+
+    def test_stdin_used_when_no_prompt_flag(self) -> None:
+        """cli_main reads stdin and passes it to run_bridge when --prompt is not given."""
+        from amplifier_paperclip_bridge.main import cli_main
+
+        with (
+            patch("sys.argv", ["bridge"]),
+            patch("sys.stdin", io.StringIO("task from stdin")),
+            patch(
+                "amplifier_paperclip_bridge.main.run_bridge",
+                return_value=None,
+            ) as mock_run_bridge,
+            patch(
+                "amplifier_paperclip_bridge.main.asyncio.run",
+                side_effect=lambda coro: coro.close() or None,
+            ),
+            patch("amplifier_paperclip_bridge.main._write_event"),
+        ):
+            try:
+                cli_main()
+            except SystemExit as exc:
+                pytest.fail(f"cli_main raised SystemExit({exc.code}) unexpectedly")
+
+        mock_run_bridge.assert_called_once()
+        _, kwargs = mock_run_bridge.call_args
+        assert kwargs.get("prompt") == "task from stdin"
+
+    def test_empty_stdin_and_no_prompt_flag_errors(self) -> None:
+        """cli_main emits SESSION_ERROR and exits 1 when stdin is empty and no --prompt."""
+        import json
+
+        from amplifier_paperclip_bridge.main import cli_main
+
+        captured: list[str] = []
+
+        with (
+            patch("sys.argv", ["bridge"]),
+            patch("sys.stdin", io.StringIO("")),
+            patch(
+                "amplifier_paperclip_bridge.main._write_event",
+                side_effect=captured.append,
+            ),
+        ):
+            with pytest.raises(SystemExit) as exc_info:
+                cli_main()
+
+        assert exc_info.value.code == 1
+        assert captured, "Expected at least one JSONL event"
+        event = json.loads(captured[-1])
+        assert event["type"] == "error"
+        assert event["code"] == "SESSION_ERROR"
+        assert "prompt" in event["message"].lower()
