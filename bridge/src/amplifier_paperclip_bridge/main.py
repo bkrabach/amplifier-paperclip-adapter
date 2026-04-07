@@ -10,6 +10,7 @@ from typing import Any
 
 from amplifier_app_cli.lib.settings import AppSettings
 from amplifier_app_cli.runtime.config import expand_env_vars
+from amplifier_foundation import Bundle
 from amplifier_foundation import load_bundle
 
 from amplifier_paperclip_bridge import __version__
@@ -174,6 +175,62 @@ async def run_bridge(
         approval_system=approval,
         session_cwd=session_cwd,
     )
+
+    # Register session.spawn capability for agent delegation.
+    # The tool-delegate module (which powers the `delegate` tool) calls
+    # coordinator.get_capability("session.spawn") to create sub-sessions.
+    # Without this registration, delegation fails with "Session spawning not
+    # available. App layer must register 'session.spawn' capability."
+    async def _spawn_session(
+        agent_name: str,
+        instruction: str,
+        parent_session: Any,
+        agent_configs: dict[str, Any],
+        sub_session_id: str | None = None,
+        orchestrator_config: dict[str, Any] | None = None,
+        parent_messages: list[dict[str, Any]] | None = None,
+        tool_inheritance: dict[str, list[str]] | None = None,
+        hook_inheritance: dict[str, list[str]] | None = None,
+        provider_preferences: list[Any] | None = None,
+        self_delegation_depth: int = 0,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Spawn a sub-session for agent delegation via the bundle's spawn mechanism."""
+        agents = prepared.bundle.agents
+        if agent_name in agent_configs:
+            config = agent_configs[agent_name]
+        elif agent_name in agents:
+            config = agents[agent_name]
+        else:
+            available = list(agent_configs.keys()) + list(agents.keys())
+            raise ValueError(
+                f"Agent '{agent_name}' not found. Available agents: {available}"
+            )
+
+        child_bundle = Bundle(
+            name=agent_name,
+            version="1.0.0",
+            session=config.get("session", {}),
+            providers=config.get("providers", []),
+            tools=config.get("tools", []),
+            hooks=config.get("hooks", []),
+            instruction=(
+                config.get("instruction") or config.get("system", {}).get("instruction")
+            ),
+        )
+
+        return await prepared.spawn(
+            child_bundle=child_bundle,
+            instruction=instruction,
+            session_id=sub_session_id,
+            parent_session=parent_session,
+            orchestrator_config=orchestrator_config,
+            parent_messages=parent_messages,
+            provider_preferences=provider_preferences,
+            self_delegation_depth=self_delegation_depth,
+        )
+
+    session.coordinator.register_capability("session.spawn", _spawn_session)
 
     _write_event(
         emit_init(

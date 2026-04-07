@@ -248,6 +248,98 @@ class TestRunBridge:
         # Providers should have been injected into the mount plan
         assert mock_prepared.mount_plan.get("providers") == provider_config
 
+    @pytest.mark.asyncio
+    async def test_registers_spawn_capability(self) -> None:
+        """Verifies run_bridge registers the 'session.spawn' capability for agent delegation."""
+        from amplifier_paperclip_bridge.main import run_bridge
+
+        mock_session = _make_mock_session()
+        mock_prepared = _make_mock_prepared(mock_session)
+        mock_bundle = _make_mock_bundle(mock_prepared)
+
+        with (
+            patch(
+                "amplifier_paperclip_bridge.main.load_bundle",
+                AsyncMock(return_value=mock_bundle),
+            ),
+            _patch_no_providers(),
+            patch("amplifier_paperclip_bridge.main._write_event"),
+        ):
+            await run_bridge(
+                bundle_uri="amplifier-dev",
+                cwd=None,
+                timeout=300,
+                prompt="Hello",
+            )
+
+        # session.spawn must be registered so tool-delegate can create sub-sessions
+        registered_names = [
+            call.args[0]
+            for call in mock_session.coordinator.register_capability.call_args_list
+        ]
+        assert "session.spawn" in registered_names, (
+            "run_bridge must register 'session.spawn' capability for agent delegation; "
+            f"got: {registered_names}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_spawn_capability_calls_prepared_spawn(self) -> None:
+        """Verifies the registered spawn callable delegates to prepared.spawn()."""
+        from amplifier_paperclip_bridge.main import run_bridge
+
+        mock_session = _make_mock_session()
+        mock_prepared = _make_mock_prepared(mock_session)
+        mock_bundle = _make_mock_bundle(mock_prepared)
+
+        # prepared.spawn should return a valid result dict
+        mock_prepared.spawn = AsyncMock(
+            return_value={"output": "agent done", "session_id": "child-123"}
+        )
+        # prepared.bundle.agents simulates an amplifier-dev bundle with an explorer agent
+        mock_prepared.bundle = MagicMock()
+        mock_prepared.bundle.agents = {
+            "explorer": {
+                "session": {},
+                "providers": [],
+                "tools": [],
+                "hooks": [],
+                "instruction": "Explore the filesystem",
+            }
+        }
+
+        with (
+            patch(
+                "amplifier_paperclip_bridge.main.load_bundle",
+                AsyncMock(return_value=mock_bundle),
+            ),
+            _patch_no_providers(),
+            patch("amplifier_paperclip_bridge.main._write_event"),
+        ):
+            await run_bridge(
+                bundle_uri="amplifier-dev",
+                cwd=None,
+                timeout=300,
+                prompt="Hello",
+            )
+
+        # Extract the registered spawn function
+        spawn_fn = None
+        for call in mock_session.coordinator.register_capability.call_args_list:
+            if call.args[0] == "session.spawn":
+                spawn_fn = call.args[1]
+                break
+        assert spawn_fn is not None, "session.spawn capability was not registered"
+
+        # Call it and verify it delegates to prepared.spawn
+        result = await spawn_fn(
+            agent_name="explorer",
+            instruction="List files in /tmp",
+            parent_session=mock_session,
+            agent_configs={},
+        )
+        assert result == {"output": "agent done", "session_id": "child-123"}
+        mock_prepared.spawn.assert_called_once()
+
 
 class TestRunBridgeErrors:
     @pytest.mark.asyncio
