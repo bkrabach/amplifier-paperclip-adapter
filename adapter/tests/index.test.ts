@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 
-// Note: These tests are for task-12, verifying root metadata exports and createServerAdapter re-export.
-// Downstream modules (execute.ts, test.ts, parse.ts) are stubs; only static values are tested here.
-
 describe('adapter root metadata (src/index.ts)', () => {
   let mod: typeof import('../src/index.js');
 

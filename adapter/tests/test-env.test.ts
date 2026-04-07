@@ -44,6 +44,27 @@ describe('testEnvironment', () => {
     expect(cwdCheck?.level).toBe('error');
   });
 
+  it('uses amplifier-paperclip-bridge as the default command in diagnostics', async () => {
+    // When no command is configured, the default must match execute.ts DEFAULT_COMMAND
+    const ctx: AdapterEnvironmentTestContext = {
+      companyId: 'test-company',
+      adapterType: 'amplifier_local',
+      config: {
+        // Intentionally omit 'command' so the default kicks in
+        cwd: process.cwd(),
+        env: { ANTHROPIC_API_KEY: 'test-key' },
+      },
+    };
+    const result = await testEnvironment(ctx);
+    // The default command ('amplifier-paperclip-bridge') is not installed, so we expect an error check
+    const commandCheck = result.checks.find(
+      c => c.code === 'amplifier_command_unresolvable' || c.code === 'amplifier_command_resolvable',
+    );
+    expect(commandCheck).toBeDefined();
+    // The check message must reference 'amplifier-paperclip-bridge', not bare 'amplifier'
+    expect(commandCheck!.message).toContain('amplifier-paperclip-bridge');
+  });
+
   it('warns when no API keys set', async () => {
     const savedAnthropicKey = process.env['ANTHROPIC_API_KEY'];
     const savedOpenaiKey = process.env['OPENAI_API_KEY'];

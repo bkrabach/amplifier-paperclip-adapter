@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 
-// Note: These tests are for task-12, verifying createServerAdapter factory.
-// execute.ts, test.ts, parse.ts are stubs (future tasks); only static shape is tested here.
-
 describe('createServerAdapter (src/server/index.ts)', () => {
   let mod: typeof import('../../src/server/index.js');
 

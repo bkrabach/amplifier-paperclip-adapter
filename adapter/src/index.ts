@@ -36,7 +36,7 @@ Configure a locally-running Amplifier bundle as a Paperclip agent.
 | \`bundle\` | string | Bundle URI to load. Accepts file paths, npm package names, or \`@namespace:path\` references (see Bundle URI formats below). |
 | \`timeout\` | number | Maximum time in seconds to wait for a single execution to complete. Defaults to 300 (5 minutes). |
 | \`promptTemplate\` | string | Handlebars-style template used to construct the prompt sent to Amplifier. Receives \`{{task}}\`, \`{{context}}\`, and other run-time variables. |
-| \`command\` | string | Override the Amplifier CLI command. Defaults to \`amplifier\`. Use an absolute path or a wrapper script if needed. |
+| \`command\` | string | Override the Amplifier CLI command. Defaults to \`amplifier-paperclip-bridge\`. Use an absolute path or a wrapper script if needed. |
 | \`env\` | object | Additional environment variables merged into the bridge process environment. Keys and values must be strings. |
 
 ### Session lifecycle
@@ -45,8 +45,9 @@ Amplifier sessions persist across agent turns within a single Paperclip run. The
 maintains a session ID returned in the execution result (\`sessionId\`). Subsequent turns
 within the same run reuse that session, allowing the underlying LLM context to accumulate.
 
-To force a fresh session, set \`clearSession: true\` in the execution result handler, or
-configure a session-expiry timeout in the agent settings.
+Session clearing is controlled by the Paperclip platform; refer to your Paperclip
+configuration for session-expiry settings. The \`sessionId\` returned in the execution result
+can be used by the platform to manage session continuity.
 
 ### Bundle URI formats
 

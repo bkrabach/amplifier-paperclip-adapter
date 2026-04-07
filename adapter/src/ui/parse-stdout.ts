@@ -13,7 +13,7 @@ function safeJsonParse(text: string): Record<string, unknown> | null {
   }
 }
 
-function asNumber(value: unknown): number {
+function asNumberOrZero(value: unknown): number {
   return typeof value === 'number' ? value : 0;
 }
 
@@ -72,10 +72,10 @@ export function parseAmplifierStdoutLine(line: string, ts: string): TranscriptEn
       kind: 'result',
       ts,
       text: typeof parsed['summary'] === 'string' ? parsed['summary'] : '',
-      inputTokens: usageObj ? asNumber(usageObj['inputTokens']) : 0,
-      outputTokens: usageObj ? asNumber(usageObj['outputTokens']) : 0,
-      cachedTokens: usageObj ? asNumber(usageObj['cachedTokens']) : 0,
-      costUsd: asNumber(parsed['costUsd']),
+      inputTokens: usageObj ? asNumberOrZero(usageObj['inputTokens']) : 0,
+      outputTokens: usageObj ? asNumberOrZero(usageObj['outputTokens']) : 0,
+      cachedTokens: usageObj ? asNumberOrZero(usageObj['cachedTokens']) : 0,
+      costUsd: asNumberOrZero(parsed['costUsd']),
       subtype: '',
       isError: false,
       errors: [],

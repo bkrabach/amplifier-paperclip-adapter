@@ -71,4 +71,10 @@ describe('printAmplifierStreamEvent', () => {
     printAmplifierStreamEvent(line, false);
     expect(consoleSpy).not.toHaveBeenCalled();
   });
+
+  it('prints tool_end with tool name', () => {
+    const line = JSON.stringify({ event: 'tool_end', tool: 'bash', output: 'exit 0' });
+    printAmplifierStreamEvent(line, false);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('bash'));
+  });
 });

@@ -39,7 +39,7 @@ export async function testEnvironment(
   const checks: AdapterEnvironmentCheck[] = [];
   const config = parseObject(ctx.config);
   const cwd = asString(config['cwd'], process.cwd());
-  const command = asString(config['command'], 'amplifier');
+  const command = asString(config['command'], 'amplifier-paperclip-bridge');
   const configEnv = parseObject(config['env']);
   const bundle = asString(config['bundle'], '');
 
