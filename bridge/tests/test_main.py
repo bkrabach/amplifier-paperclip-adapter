@@ -392,6 +392,79 @@ class TestCliMain:
         _, kwargs = mock_run_bridge.call_args
         assert kwargs.get("prompt") == "task from stdin"
 
+    def test_paperclip_amplifier_home_override_is_fixed(self) -> None:
+        """When AMPLIFIER_HOME points to a Paperclip temp dir, cli_main unsets it and sets AMPLIFIER_SKILLS_DIR."""
+        import os
+        from unittest.mock import patch
+
+        from amplifier_paperclip_bridge.main import cli_main
+
+        paperclip_skills_dir = "/tmp/paperclip-skills-abc123"
+        env_at_run: dict[str, str | None] = {}
+
+        def capture_env(coro: object) -> None:
+            if hasattr(coro, "close"):
+                coro.close()  # type: ignore[union-attr]
+            env_at_run["AMPLIFIER_HOME"] = os.environ.get("AMPLIFIER_HOME")
+            env_at_run["AMPLIFIER_SKILLS_DIR"] = os.environ.get("AMPLIFIER_SKILLS_DIR")
+
+        with (
+            patch("sys.argv", ["bridge", "--prompt", "hello"]),
+            patch.dict(
+                "os.environ", {"AMPLIFIER_HOME": paperclip_skills_dir}, clear=False
+            ),
+            patch(
+                "amplifier_paperclip_bridge.main.asyncio.run",
+                side_effect=capture_env,
+            ),
+            patch("amplifier_paperclip_bridge.main._write_event"),
+        ):
+            os.environ.pop("AMPLIFIER_SKILLS_DIR", None)
+            try:
+                cli_main()
+            except SystemExit:
+                pass
+
+        assert env_at_run["AMPLIFIER_HOME"] is None, (
+            "AMPLIFIER_HOME should be unset when Paperclip temp dir is detected"
+        )
+        assert env_at_run["AMPLIFIER_SKILLS_DIR"] == paperclip_skills_dir, (
+            "AMPLIFIER_SKILLS_DIR should be set to the Paperclip temp skills dir"
+        )
+
+    def test_non_paperclip_amplifier_home_is_preserved(self) -> None:
+        """When AMPLIFIER_HOME is set to a non-Paperclip path, cli_main leaves it unchanged."""
+        import os
+        from unittest.mock import patch
+
+        from amplifier_paperclip_bridge.main import cli_main
+
+        real_home = "/home/user/.amplifier"
+        env_at_run: dict[str, str | None] = {}
+
+        def capture_env(coro: object) -> None:
+            if hasattr(coro, "close"):
+                coro.close()  # type: ignore[union-attr]
+            env_at_run["AMPLIFIER_HOME"] = os.environ.get("AMPLIFIER_HOME")
+
+        with (
+            patch("sys.argv", ["bridge", "--prompt", "hello"]),
+            patch.dict("os.environ", {"AMPLIFIER_HOME": real_home}, clear=False),
+            patch(
+                "amplifier_paperclip_bridge.main.asyncio.run",
+                side_effect=capture_env,
+            ),
+            patch("amplifier_paperclip_bridge.main._write_event"),
+        ):
+            try:
+                cli_main()
+            except SystemExit:
+                pass
+
+        assert env_at_run["AMPLIFIER_HOME"] == real_home, (
+            "AMPLIFIER_HOME should be preserved when it doesn't match Paperclip temp dir pattern"
+        )
+
     def test_empty_stdin_and_no_prompt_flag_errors(self) -> None:
         """cli_main emits SESSION_ERROR and exits 1 when stdin is empty and no --prompt."""
         import json

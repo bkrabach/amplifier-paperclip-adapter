@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -210,6 +211,14 @@ async def run_bridge(
 
 def cli_main() -> None:
     """Main entry point for the amplifier-paperclip-bridge CLI."""
+    # Paperclip sets AMPLIFIER_HOME to a temp skills dir -- save it for skills, then restore real home
+    amplifier_home = os.environ.get("AMPLIFIER_HOME", "")
+    if amplifier_home.startswith("/tmp/paperclip-skills-"):
+        # Save for skills injection
+        os.environ["AMPLIFIER_SKILLS_DIR"] = amplifier_home
+        # Restore real Amplifier home
+        del os.environ["AMPLIFIER_HOME"]
+
     logging.basicConfig(
         level=logging.WARNING,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
