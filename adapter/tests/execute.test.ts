@@ -96,7 +96,9 @@ describe('execute', () => {
     expect(result.errorMessage).toBeTruthy();
   });
 
-  it('passes --prompt flag as a CLI argument', async () => {
+  it('passes --prompt flag as a CLI argument with agent identity from default template', async () => {
+    // The default promptTemplate is 'You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.'
+    // Verify the --prompt flag is passed and contains the rendered agent identity.
     let capturedCommandArgs: string[] = [];
 
     const script = [
@@ -113,7 +115,37 @@ describe('execute', () => {
 
     expect(capturedCommandArgs).toContain('--prompt');
     const promptIdx = capturedCommandArgs.indexOf('--prompt');
-    expect(capturedCommandArgs[promptIdx + 1]).toContain('Do a thing');
+    // Default template renders agent.id and agent.name from the execution context
+    expect(capturedCommandArgs[promptIdx + 1]).toContain('test-agent-id');
+    expect(capturedCommandArgs[promptIdx + 1]).toContain('Test Agent');
+  });
+
+  it('renders a non-empty prompt for on-demand heartbeat with no task field', async () => {
+    // Regression test: manual heartbeat (on_demand) has no `task` in context.
+    // The default prompt template was '{{task}}' which renders to '' when context
+    // has no task, producing an empty --prompt flag and a bridge "No prompt provided" error.
+    let capturedPrompt = '';
+
+    const script = [
+      'process.stdout.write(JSON.stringify({event:"init",sessionId:"test-sid",model:"test-model",bundle:"amplifier-dev"}) + "\\n");',
+      'process.stdout.write(JSON.stringify({event:"result",summary:"OK",usage:{inputTokens:1,outputTokens:1},costUsd:0}) + "\\n");',
+    ].join('');
+
+    // Create a context with NO task and NO wake payload (simulates on_demand heartbeat)
+    const ctx = buildFakeContext(script);
+    ctx.context = {};
+
+    ctx.onMeta = async (meta: Record<string, unknown>) => {
+      capturedPrompt = meta['prompt'] as string;
+    };
+
+    await execute(ctx);
+
+    // The prompt must be non-empty even when context has no task field
+    expect(capturedPrompt).toBeTruthy();
+    expect(capturedPrompt.length).toBeGreaterThan(0);
+    // Default template should include agent info: "You are agent <id> (<name>). Continue..."
+    expect(capturedPrompt).toContain('test-agent-id');
   });
 
   it('uses default bundle when not configured - does not throw, returns valid result', async () => {

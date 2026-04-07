@@ -32,7 +32,8 @@ const DEFAULT_COMMAND = 'amplifier-paperclip-bridge';
 const DEFAULT_BUNDLE = 'amplifier-dev';
 const DEFAULT_TIMEOUT_SEC = 300;
 const DEFAULT_GRACE_SEC = 20;
-const DEFAULT_PROMPT_TEMPLATE = '{{task}}';
+const DEFAULT_PROMPT_TEMPLATE = 'You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.';
+const DEFAULT_FALLBACK_PROMPT = 'You are an Amplifier agent. Continue your Paperclip work.';
 
 /**
  * Create a temporary directory containing Paperclip skills symlinked into
@@ -125,9 +126,17 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       agentId: agent.id,
       companyId: agent.companyId,
       runId,
+      company: { id: agent.companyId },
+      agent,
+      run: { id: runId, source: 'on_demand' },
+      context,
     };
     const renderedPrompt = renderTemplate(promptTemplate, templateData);
-    const prompt = joinPromptSections([renderedPrompt, wakeSection]);
+    // Wake section first (highest-priority context), rendered template last — mirrors claude-local ordering.
+    const joinedPrompt = joinPromptSections([wakeSection, renderedPrompt]);
+    // Safety net: if every section rendered empty, fall back to a known-non-empty string so
+    // the bridge never receives an empty --prompt flag and errors with "No prompt provided".
+    const prompt = joinedPrompt.length > 0 ? joinedPrompt : DEFAULT_FALLBACK_PROMPT;
 
     // --- Build command args ---
     // extraArgs come first so that flag-based overrides (e.g. -e <script> in
