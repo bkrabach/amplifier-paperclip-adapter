@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from amplifier_app_cli.lib.settings import AppSettings
-from amplifier_app_cli.runtime.config import resolve_bundle_config
+from amplifier_app_cli.runtime.config import expand_env_vars
+from amplifier_foundation import load_bundle
 
 from amplifier_paperclip_bridge import __version__
 from amplifier_paperclip_bridge.approval import HeadlessApprovalSystem
@@ -117,10 +118,17 @@ async def run_bridge(
 
     session_cwd = Path(cwd) if cwd else Path.cwd()
 
-    # Use CLI bundle loading mechanism which reads and injects user-configured
-    # providers (Anthropic, OpenAI, etc.) from ~/.amplifier/settings.yaml
+    # Load the bundle and inject user-configured providers from ~/.amplifier/settings.yaml.
+    # We use the raw foundation API (no CLI behavior hooks) to keep stdout clean for
+    # the JSONL protocol, then manually inject provider settings with env-var expansion.
+    bundle = await load_bundle(bundle_uri)
+    prepared = await bundle.prepare()
+
     app_settings = AppSettings()
-    _config_data, prepared = await resolve_bundle_config(bundle_uri, app_settings)
+    provider_overrides = app_settings.get_provider_overrides()
+    if provider_overrides and not prepared.mount_plan.get("providers"):
+        expanded = expand_env_vars({"providers": provider_overrides})
+        prepared.mount_plan["providers"] = expanded["providers"]
 
     approval = HeadlessApprovalSystem()
     session = await prepared.create_session(
