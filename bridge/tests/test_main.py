@@ -283,6 +283,79 @@ class TestRunBridge:
         )
 
     @pytest.mark.asyncio
+    async def test_spawn_inherits_parent_providers_when_agent_has_none(self) -> None:
+        """When agent config declares no providers, child bundle inherits parent bundle's providers."""
+        from amplifier_paperclip_bridge.main import run_bridge
+
+        mock_session = _make_mock_session()
+        mock_prepared = _make_mock_prepared(mock_session)
+        mock_bundle = _make_mock_bundle(mock_prepared)
+
+        parent_providers = [
+            {"module": "provider-anthropic", "config": {"api_key": "sk-test"}}
+        ]
+        mock_prepared.spawn = AsyncMock(
+            return_value={"output": "done", "session_id": "child-456"}
+        )
+        mock_prepared.bundle = MagicMock()
+        mock_prepared.bundle.providers = parent_providers
+        mock_prepared.bundle.agents = {
+            "explorer": {
+                "session": {},
+                # No "providers" key -- agent doesn't declare its own providers
+                "tools": [],
+                "hooks": [],
+                "instruction": "Explore the filesystem",
+            }
+        }
+
+        with (
+            patch(
+                "amplifier_paperclip_bridge.main.load_bundle",
+                AsyncMock(return_value=mock_bundle),
+            ),
+            _patch_no_providers(),
+            patch("amplifier_paperclip_bridge.main._write_event"),
+        ):
+            await run_bridge(
+                bundle_uri="amplifier-dev",
+                cwd=None,
+                timeout=300,
+                prompt="Hello",
+            )
+
+        # Extract the registered spawn capability
+        spawn_fn = None
+        for c in mock_session.coordinator.register_capability.call_args_list:
+            if c.args[0] == "session.spawn":
+                spawn_fn = c.args[1]
+                break
+        assert spawn_fn is not None, "session.spawn capability was not registered"
+
+        # Call spawn with an agent that has no providers; capture which providers Bundle receives
+        bundle_kwargs_list: list[dict] = []
+
+        def capture_bundle(**kwargs: object) -> MagicMock:
+            bundle_kwargs_list.append(dict(kwargs))
+            return MagicMock()
+
+        with patch(
+            "amplifier_paperclip_bridge.main.Bundle", side_effect=capture_bundle
+        ):
+            await spawn_fn(
+                agent_name="explorer",
+                instruction="List files in /tmp",
+                parent_session=mock_session,
+                agent_configs={},
+            )
+
+        assert len(bundle_kwargs_list) == 1, "Bundle should have been constructed once"
+        assert bundle_kwargs_list[0]["providers"] == parent_providers, (
+            f"Child bundle should inherit parent's providers when agent declares none, "
+            f"but got: {bundle_kwargs_list[0]['providers']}"
+        )
+
+    @pytest.mark.asyncio
     async def test_spawn_capability_calls_prepared_spawn(self) -> None:
         """Verifies the registered spawn callable delegates to prepared.spawn()."""
         from amplifier_paperclip_bridge.main import run_bridge

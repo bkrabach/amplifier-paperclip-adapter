@@ -207,11 +207,12 @@ async def run_bridge(
                 f"Agent '{agent_name}' not found. Available agents: {available}"
             )
 
+        child_providers = config.get("providers", []) or prepared.bundle.providers
         child_bundle = Bundle(
             name=agent_name,
             version="1.0.0",
             session=config.get("session", {}),
-            providers=config.get("providers", []),
+            providers=child_providers,
             tools=config.get("tools", []),
             hooks=config.get("hooks", []),
             instruction=(
