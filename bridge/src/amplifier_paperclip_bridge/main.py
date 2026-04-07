@@ -130,6 +130,36 @@ async def run_bridge(
         expanded = expand_env_vars({"providers": provider_overrides})
         prepared.mount_plan["providers"] = expanded["providers"]
 
+    # Disable stdout-writing UI hooks to keep the JSONL protocol clean.
+    # The amplifier-dev bundle includes hook modules (hooks-streaming-ui,
+    # hooks-todo-display) that write directly to sys.stdout via print().
+    # We suppress their output here so only our own emit_* lines appear on
+    # stdout. The bridge's own hooks (content_block:delta, tool:pre, tool:post)
+    # already capture and relay the relevant events as JSONL.
+    _SILENT_UI_HOOKS: dict[str, dict] = {
+        "hooks-streaming-ui": {
+            "ui": {
+                "show_token_usage": False,
+                "show_tool_lines": 0,
+                "show_thinking_stream": False,
+            }
+        },
+        "hooks-todo-display": {
+            "show_progress_bar": False,
+            "show_border": False,
+        },
+    }
+    hooks = prepared.mount_plan.get("hooks", [])
+    for hook in hooks:
+        if isinstance(hook, dict) and hook.get("module") in _SILENT_UI_HOOKS:
+            silence = _SILENT_UI_HOOKS[hook["module"]]
+            cfg = hook.setdefault("config", {})
+            for key, val in silence.items():
+                if isinstance(val, dict):
+                    cfg.setdefault(key, {}).update(val)
+                else:
+                    cfg[key] = val
+
     approval = HeadlessApprovalSystem()
     session = await prepared.create_session(
         approval_system=approval,
