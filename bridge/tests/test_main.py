@@ -9,6 +9,9 @@ import pytest
 
 from amplifier_paperclip_bridge.main import parse_args
 
+# Default stub config returned by mock resolve_bundle_config
+_STUB_CONFIG: dict = {}
+
 
 class TestParseArgs:
     def test_defaults(self) -> None:
@@ -78,12 +81,6 @@ def _make_mock_prepared(mock_session: MagicMock) -> MagicMock:
     return mock_prepared
 
 
-def _make_mock_bundle(mock_prepared: MagicMock) -> MagicMock:
-    mock_bundle = AsyncMock()
-    mock_bundle.prepare = AsyncMock(return_value=mock_prepared)
-    return mock_bundle
-
-
 class TestRunBridge:
     @pytest.mark.asyncio
     async def test_emits_init_and_result(self) -> None:
@@ -95,14 +92,13 @@ class TestRunBridge:
 
         mock_session = _make_mock_session(session_id=session_id, response=response_text)
         mock_prepared = _make_mock_prepared(mock_session)
-        mock_bundle = _make_mock_bundle(mock_prepared)
 
         output_lines: list[str] = []
 
         with (
             patch(
-                "amplifier_paperclip_bridge.main.load_bundle",
-                AsyncMock(return_value=mock_bundle),
+                "amplifier_paperclip_bridge.main.resolve_bundle_config",
+                AsyncMock(return_value=(_STUB_CONFIG, mock_prepared)),
             ),
             patch(
                 "amplifier_paperclip_bridge.main._write_event",
@@ -127,20 +123,19 @@ class TestRunBridge:
         assert last["response"] == response_text
 
     @pytest.mark.asyncio
-    async def test_calls_load_bundle_with_uri(self) -> None:
-        """Verifies load_bundle called once with the exact bundle URI string."""
+    async def test_calls_resolve_bundle_config_with_uri(self) -> None:
+        """Verifies resolve_bundle_config called with the exact bundle URI string."""
         from amplifier_paperclip_bridge.main import run_bridge
 
         bundle_uri = "git+https://github.com/example/my-bundle"
 
         mock_session = _make_mock_session()
         mock_prepared = _make_mock_prepared(mock_session)
-        mock_bundle = _make_mock_bundle(mock_prepared)
 
-        mock_load = AsyncMock(return_value=mock_bundle)
+        mock_resolve = AsyncMock(return_value=(_STUB_CONFIG, mock_prepared))
 
         with (
-            patch("amplifier_paperclip_bridge.main.load_bundle", mock_load),
+            patch("amplifier_paperclip_bridge.main.resolve_bundle_config", mock_resolve),
             patch("amplifier_paperclip_bridge.main._write_event"),
         ):
             await run_bridge(
@@ -150,7 +145,10 @@ class TestRunBridge:
                 prompt="Hello",
             )
 
-        mock_load.assert_called_once_with(bundle_uri)
+        # resolve_bundle_config is called with (bundle_uri, app_settings_instance)
+        mock_resolve.assert_called_once()
+        call_args = mock_resolve.call_args
+        assert call_args[0][0] == bundle_uri  # first positional arg is the URI
 
     @pytest.mark.asyncio
     async def test_passes_cwd_to_create_session(self) -> None:
@@ -159,12 +157,11 @@ class TestRunBridge:
 
         mock_session = _make_mock_session()
         mock_prepared = _make_mock_prepared(mock_session)
-        mock_bundle = _make_mock_bundle(mock_prepared)
 
         with (
             patch(
-                "amplifier_paperclip_bridge.main.load_bundle",
-                AsyncMock(return_value=mock_bundle),
+                "amplifier_paperclip_bridge.main.resolve_bundle_config",
+                AsyncMock(return_value=(_STUB_CONFIG, mock_prepared)),
             ),
             patch("amplifier_paperclip_bridge.main._write_event"),
         ):
@@ -189,7 +186,7 @@ class TestRunBridgeErrors:
 
         with (
             patch(
-                "amplifier_paperclip_bridge.main.load_bundle",
+                "amplifier_paperclip_bridge.main.resolve_bundle_config",
                 AsyncMock(side_effect=FileNotFoundError("Bundle 'nope' not found")),
             ),
             patch("amplifier_paperclip_bridge.main._write_event"),
@@ -214,12 +211,11 @@ class TestRunBridgeErrors:
 
         mock_session.execute = AsyncMock(side_effect=slow_execute)
         mock_prepared = _make_mock_prepared(mock_session)
-        mock_bundle = _make_mock_bundle(mock_prepared)
 
         with (
             patch(
-                "amplifier_paperclip_bridge.main.load_bundle",
-                AsyncMock(return_value=mock_bundle),
+                "amplifier_paperclip_bridge.main.resolve_bundle_config",
+                AsyncMock(return_value=(_STUB_CONFIG, mock_prepared)),
             ),
             patch("amplifier_paperclip_bridge.main._write_event"),
         ):
@@ -241,12 +237,11 @@ class TestRunBridgeErrors:
             side_effect=RuntimeError("orchestrator crashed")
         )
         mock_prepared = _make_mock_prepared(mock_session)
-        mock_bundle = _make_mock_bundle(mock_prepared)
 
         with (
             patch(
-                "amplifier_paperclip_bridge.main.load_bundle",
-                AsyncMock(return_value=mock_bundle),
+                "amplifier_paperclip_bridge.main.resolve_bundle_config",
+                AsyncMock(return_value=(_STUB_CONFIG, mock_prepared)),
             ),
             patch("amplifier_paperclip_bridge.main._write_event"),
         ):

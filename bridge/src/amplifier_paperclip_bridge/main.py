@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from amplifier_foundation import load_bundle
+from amplifier_app_cli.lib.settings import AppSettings
+from amplifier_app_cli.runtime.config import resolve_bundle_config
 
 from amplifier_paperclip_bridge import __version__
 from amplifier_paperclip_bridge.approval import HeadlessApprovalSystem
@@ -116,8 +117,10 @@ async def run_bridge(
 
     session_cwd = Path(cwd) if cwd else Path.cwd()
 
-    bundle = await load_bundle(bundle_uri)
-    prepared = await bundle.prepare()
+    # Use CLI bundle loading mechanism which reads and injects user-configured
+    # providers (Anthropic, OpenAI, etc.) from ~/.amplifier/settings.yaml
+    app_settings = AppSettings()
+    _config_data, prepared = await resolve_bundle_config(bundle_uri, app_settings)
 
     approval = HeadlessApprovalSystem()
     session = await prepared.create_session(
