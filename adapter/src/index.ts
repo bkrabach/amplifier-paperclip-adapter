@@ -34,7 +34,7 @@ Configure a locally-running Amplifier bundle as a Paperclip agent.
 |-------|------|-------------|
 | \`cwd\` | string | Working directory passed to the Amplifier process. Defaults to the process working directory of the bridge. |
 | \`bundle\` | string | Bundle URI to load. Accepts file paths, npm package names, or \`@namespace:path\` references (see Bundle URI formats below). |
-| \`timeout\` | number | Maximum time in seconds to wait for a single execution to complete. Defaults to 300 (5 minutes). |
+| \`timeout\` | number | Maximum time in seconds to wait for a single execution to complete. Defaults to 0 (no limit). |
 | \`promptTemplate\` | string | Handlebars-style template used to construct the prompt sent to Amplifier. Receives \`{{task}}\`, \`{{context}}\`, and other run-time variables. |
 | \`command\` | string | Override the Amplifier CLI command. Defaults to \`amplifier-paperclip-bridge\`. Use an absolute path or a wrapper script if needed. |
 | \`env\` | object | Additional environment variables merged into the bridge process environment. Keys and values must be strings. |

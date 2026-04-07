@@ -13,11 +13,11 @@ from amplifier_paperclip_bridge.main import parse_args
 
 class TestParseArgs:
     def test_defaults(self) -> None:
-        """Verifies default bundle="amplifier-dev", cwd=None, timeout=300, prompt=None."""
+        """Verifies default bundle="amplifier-dev", cwd=None, timeout=0, prompt=None."""
         args = parse_args([])
         assert args.bundle == "amplifier-dev"
         assert args.cwd is None
-        assert args.timeout == 300
+        assert args.timeout == 0
         assert args.prompt is None
 
     def test_custom_prompt(self) -> None:
@@ -412,6 +412,57 @@ class TestRunBridge:
         )
         assert result == {"output": "agent done", "session_id": "child-123"}
         mock_prepared.spawn.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_timeout_zero_calls_execute_directly(self) -> None:
+        """When timeout=0, session.execute is called directly without asyncio.wait_for.
+
+        timeout=0 means 'no limit', matching how claude-local works.
+        runChildProcess treats timeoutSec===0 as no timeout, and the bridge should
+        pass the prompt to session.execute() directly without a wait_for wrapper.
+        """
+        import inspect
+
+        from amplifier_paperclip_bridge.main import run_bridge
+
+        mock_session = _make_mock_session()
+        mock_prepared = _make_mock_prepared(mock_session)
+        mock_bundle = _make_mock_bundle(mock_prepared)
+
+        wait_for_called = False
+
+        async def fake_wait_for(coro: object, *, timeout: object) -> object:
+            nonlocal wait_for_called
+            wait_for_called = True
+            # Still need to await the coro so session.execute runs
+            if inspect.isawaitable(coro):
+                return await coro  # type: ignore[misc]
+            return coro
+
+        with (
+            patch(
+                "amplifier_paperclip_bridge.main.load_bundle",
+                AsyncMock(return_value=mock_bundle),
+            ),
+            _patch_no_providers(),
+            patch("amplifier_paperclip_bridge.main._write_event"),
+            patch(
+                "amplifier_paperclip_bridge.main.asyncio.wait_for",
+                side_effect=fake_wait_for,
+            ),
+        ):
+            await run_bridge(
+                bundle_uri="amplifier-dev",
+                cwd=None,
+                timeout=0,
+                prompt="Hello",
+            )
+
+        assert not wait_for_called, (
+            "asyncio.wait_for should NOT be called when timeout=0 (no limit); "
+            "session.execute should be awaited directly"
+        )
+        mock_session.execute.assert_called_once_with("Hello")
 
 
 class TestRunBridgeErrors:

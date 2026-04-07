@@ -65,8 +65,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--timeout",
         type=int,
-        default=300,
-        help="Maximum seconds to wait for the session to complete.",
+        default=0,
+        help="Maximum seconds to wait for the session to complete (0 = no limit).",
     )
     parser.add_argument(
         "--prompt",
@@ -255,7 +255,10 @@ async def run_bridge(
     )
 
     async with session:
-        result = await asyncio.wait_for(session.execute(prompt), timeout=timeout)
+        if timeout > 0:
+            result = await asyncio.wait_for(session.execute(prompt), timeout=timeout)
+        else:
+            result = await session.execute(prompt)
 
     _write_event(
         emit_result(

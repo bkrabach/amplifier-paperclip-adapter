@@ -30,7 +30,7 @@ const MODULE_DIR = path.dirname(new URL(import.meta.url).pathname);
 
 const DEFAULT_COMMAND = 'amplifier-paperclip-bridge';
 const DEFAULT_BUNDLE = 'amplifier-dev';
-const DEFAULT_TIMEOUT_SEC = 300;
+const DEFAULT_TIMEOUT_SEC = 0; // 0 = no timeout, matching claude-local behaviour
 const DEFAULT_GRACE_SEC = 20;
 const DEFAULT_PROMPT_TEMPLATE = 'You are agent {{agent.id}} ({{agent.name}}). Continue your Paperclip work.';
 const DEFAULT_FALLBACK_PROMPT = 'You are an Amplifier agent. Continue your Paperclip work.';

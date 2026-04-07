@@ -162,4 +162,27 @@ describe('execute', () => {
     expect(result.exitCode).toBe(0);
     expect(result.timedOut).toBe(false);
   });
+
+  it('defaults to --timeout 0 (no timeout) when timeout not configured', async () => {
+    // The default timeout should be 0 (no limit), matching how claude-local works.
+    // runChildProcess treats timeoutSec === 0 as "no timeout".
+    let capturedCommandArgs: string[] = [];
+
+    const script = [
+      'process.stdout.write(JSON.stringify({event:"init",sessionId:"test-sid",model:"test-model",bundle:"amplifier-dev"}) + "\\n");',
+      'process.stdout.write(JSON.stringify({event:"result",summary:"OK",usage:{inputTokens:1,outputTokens:1},costUsd:0}) + "\\n");',
+    ].join('');
+
+    // Omit timeout from config — execute() should use DEFAULT_TIMEOUT_SEC = 0
+    const ctx = buildFakeContext(script, { timeout: undefined });
+    ctx.onMeta = async (meta: Record<string, unknown>) => {
+      capturedCommandArgs = meta['commandArgs'] as string[];
+    };
+
+    await execute(ctx);
+
+    const timeoutIdx = capturedCommandArgs.indexOf('--timeout');
+    expect(timeoutIdx).toBeGreaterThan(-1);
+    expect(capturedCommandArgs[timeoutIdx + 1]).toBe('0');
+  });
 });
