@@ -93,7 +93,7 @@ Connects [Amplifier](https://github.com/microsoft/amplifier) as an agent runtime
 ## Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/bkrabach/amplifier-paperclip-adapter/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/bkrabach/amplifier-paperclip-adapter/main/install.sh | bash
 ```
 
 ## Architecture
@@ -1531,7 +1531,7 @@ Create `amplifier-paperclip-adapter/install.sh`:
 # Amplifier-Paperclip Adapter Installer
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/bkrabach/amplifier-paperclip-adapter/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/bkrabach/amplifier-paperclip-adapter/main/install.sh | bash
 #
 set -euo pipefail
 
