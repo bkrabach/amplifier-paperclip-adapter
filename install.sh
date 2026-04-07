@@ -93,7 +93,11 @@ echo ""
 
 # Word-splitting $PIP_CMD is intentional: "uv pip" must become two separate words.
 # shellcheck disable=SC2086
-$PIP_CMD install "${PACKAGE} @ git+${REPO}#subdirectory=bridge"
+if [[ "$PIP_CMD" == "uv pip" ]]; then
+    $PIP_CMD install --system "${PACKAGE} @ git+${REPO}#subdirectory=bridge"
+else
+    $PIP_CMD install "${PACKAGE} @ git+${REPO}#subdirectory=bridge"
+fi
 
 # ── Verification ───────────────────────────────────────────────────────────────
 
