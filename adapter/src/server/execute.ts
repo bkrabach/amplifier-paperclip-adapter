@@ -137,6 +137,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       '--bundle', bundle,
       '--cwd', cwd,
       '--timeout', String(timeoutSec),
+      '--prompt', prompt,
     ];
 
     // --- Emit invocation metadata ---

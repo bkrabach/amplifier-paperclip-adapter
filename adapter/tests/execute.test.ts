@@ -96,6 +96,26 @@ describe('execute', () => {
     expect(result.errorMessage).toBeTruthy();
   });
 
+  it('passes --prompt flag as a CLI argument', async () => {
+    let capturedCommandArgs: string[] = [];
+
+    const script = [
+      'process.stdout.write(JSON.stringify({event:"init",sessionId:"test-sid",model:"test-model",bundle:"amplifier-dev"}) + "\\n");',
+      'process.stdout.write(JSON.stringify({event:"result",summary:"OK",usage:{inputTokens:1,outputTokens:1},costUsd:0}) + "\\n");',
+    ].join('');
+
+    const ctx = buildFakeContext(script);
+    ctx.onMeta = async (meta: Record<string, unknown>) => {
+      capturedCommandArgs = meta['commandArgs'] as string[];
+    };
+
+    await execute(ctx);
+
+    expect(capturedCommandArgs).toContain('--prompt');
+    const promptIdx = capturedCommandArgs.indexOf('--prompt');
+    expect(capturedCommandArgs[promptIdx + 1]).toContain('Do a thing');
+  });
+
   it('uses default bundle when not configured - does not throw, returns valid result', async () => {
     const script = [
       'process.stdout.write(JSON.stringify({event:"init",sessionId:"test-sid",model:"test-model",bundle:"amplifier-dev"}) + "\\n");',
