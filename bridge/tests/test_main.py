@@ -284,7 +284,12 @@ class TestRunBridge:
 
     @pytest.mark.asyncio
     async def test_spawn_inherits_parent_providers_when_agent_has_none(self) -> None:
-        """When agent config declares no providers, child bundle inherits parent bundle's providers."""
+        """When agent config declares no providers, child bundle inherits providers from mount_plan.
+
+        AppSettings injects providers into prepared.mount_plan["providers"], not into
+        bundle.providers (which is always empty after prepare()).  The spawn path must
+        read from mount_plan so child sessions receive the configured LLM provider.
+        """
         from amplifier_paperclip_bridge.main import run_bridge
 
         mock_session = _make_mock_session()
@@ -298,7 +303,7 @@ class TestRunBridge:
             return_value={"output": "done", "session_id": "child-456"}
         )
         mock_prepared.bundle = MagicMock()
-        mock_prepared.bundle.providers = parent_providers
+        mock_prepared.bundle.providers = []  # empty — bundle.providers is never populated
         mock_prepared.bundle.agents = {
             "explorer": {
                 "session": {},
@@ -308,6 +313,8 @@ class TestRunBridge:
                 "instruction": "Explore the filesystem",
             }
         }
+        # Providers are injected here by AppSettings (the real runtime path)
+        mock_prepared.mount_plan = {"providers": parent_providers}
 
         with (
             patch(
@@ -353,6 +360,89 @@ class TestRunBridge:
         assert bundle_kwargs_list[0]["providers"] == parent_providers, (
             f"Child bundle should inherit parent's providers when agent declares none, "
             f"but got: {bundle_kwargs_list[0]['providers']}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_spawn_reads_providers_from_mount_plan_not_bundle(self) -> None:
+        """Child bundle must read providers from mount_plan, not bundle.providers.
+
+        After bundle.prepare(), bundle.providers is always empty.  AppSettings
+        injects providers into prepared.mount_plan["providers"].  If _spawn_session
+        falls back to bundle.providers the child gets NO providers and never talks
+        to an LLM.
+        """
+        from amplifier_paperclip_bridge.main import run_bridge
+
+        mock_session = _make_mock_session()
+        mock_prepared = _make_mock_prepared(mock_session)
+        mock_bundle = _make_mock_bundle(mock_prepared)
+
+        mount_plan_providers = [
+            {
+                "module": "provider-anthropic",
+                "config": {"api_key": "sk-from-mount-plan"},
+            }
+        ]
+        mock_prepared.bundle = MagicMock()
+        mock_prepared.bundle.providers = []  # empty — as in the real runtime
+        mock_prepared.bundle.agents = {
+            "explorer": {
+                "session": {},
+                # No "providers" key — agent doesn't declare its own providers
+                "tools": [],
+                "hooks": [],
+                "instruction": "Explore the filesystem",
+            }
+        }
+        # Providers live here, NOT in bundle.providers
+        mock_prepared.mount_plan = {"providers": mount_plan_providers}
+        mock_prepared.spawn = AsyncMock(
+            return_value={"output": "done", "session_id": "child-456"}
+        )
+
+        with (
+            patch(
+                "amplifier_paperclip_bridge.main.load_bundle",
+                AsyncMock(return_value=mock_bundle),
+            ),
+            _patch_no_providers(),
+            patch("amplifier_paperclip_bridge.main._write_event"),
+        ):
+            await run_bridge(
+                bundle_uri="amplifier-dev",
+                cwd=None,
+                timeout=300,
+                prompt="Hello",
+            )
+
+        # Extract the registered spawn capability
+        spawn_fn = None
+        for c in mock_session.coordinator.register_capability.call_args_list:
+            if c.args[0] == "session.spawn":
+                spawn_fn = c.args[1]
+                break
+        assert spawn_fn is not None, "session.spawn capability was not registered"
+
+        bundle_kwargs_list: list[dict] = []
+
+        def capture_bundle(**kwargs: object) -> MagicMock:
+            bundle_kwargs_list.append(dict(kwargs))
+            return MagicMock()
+
+        with patch(
+            "amplifier_paperclip_bridge.main.Bundle", side_effect=capture_bundle
+        ):
+            await spawn_fn(
+                agent_name="explorer",
+                instruction="List files in /tmp",
+                parent_session=mock_session,
+                agent_configs={},
+            )
+
+        assert len(bundle_kwargs_list) == 1, "Bundle should have been constructed once"
+        assert bundle_kwargs_list[0]["providers"] == mount_plan_providers, (
+            f"Child bundle must get providers from mount_plan['providers'], "
+            f"not from empty bundle.providers. Got: {bundle_kwargs_list[0]['providers']}"
         )
 
     @pytest.mark.asyncio
