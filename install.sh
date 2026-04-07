@@ -12,11 +12,12 @@ set -euo pipefail
 #  Requirements:
 #    - Python 3.11+
 #    - git
-#    - uv (preferred), pip3, or pip
+#    - uv (preferred), pipx, or pip
 # ==============================================================================
 
 REPO="https://github.com/bkrabach/amplifier-paperclip-adapter.git"
 PACKAGE="amplifier-paperclip-bridge"
+PACKAGE_URL="${PACKAGE} @ git+${REPO}#subdirectory=bridge"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ check_python_version() {
     fi
 }
 
-# ── Prerequisites ──────────────────────────────────────────────────────────────
+# ── Prerequisites ─────────────────────────────────────────────────────────────
 
 echo ""
 echo "┌─────────────────────────────────────────────────┐"
@@ -66,43 +67,56 @@ check_command python3
 check_python_version python3
 check_command git
 
-# ── Pip detection ──────────────────────────────────────────────────────────────
+# ── Installer detection ───────────────────────────────────────────────────────
 
-PIP_CMD=""
+INSTALL_METHOD=""
 if command -v uv &>/dev/null; then
-    PIP_CMD="uv pip"
-    echo "  pip installer: uv pip ✓"
+    INSTALL_METHOD="uv"
+    echo "  installer: uv tool install ✓"
+elif command -v pipx &>/dev/null; then
+    INSTALL_METHOD="pipx"
+    echo "  installer: pipx ✓"
 elif command -v pip3 &>/dev/null; then
-    PIP_CMD="pip3"
-    echo "  pip installer: pip3 ✓"
+    INSTALL_METHOD="pip3"
+    echo "  installer: pip3 (--user) ✓"
 elif command -v pip &>/dev/null; then
-    PIP_CMD="pip"
-    echo "  pip installer: pip ✓"
+    INSTALL_METHOD="pip"
+    echo "  installer: pip (--user) ✓"
 else
-    echo "ERROR: No pip installer found (tried: uv pip, pip3, pip)." >&2
-    echo "       Please install uv (https://github.com/astral-sh/uv) or pip and re-run." >&2
+    echo "ERROR: No installer found (tried: uv, pipx, pip3, pip)." >&2
+    echo "       Please install uv (https://github.com/astral-sh/uv) and re-run." >&2
     exit 1
 fi
 
-# ── Install ────────────────────────────────────────────────────────────────────
+# ── Install ───────────────────────────────────────────────────────────────────
 
 echo ""
 echo "Installing ${PACKAGE} from GitHub..."
 echo "  Source: ${REPO}"
 echo ""
 
-# Word-splitting $PIP_CMD is intentional: "uv pip" must become two separate words.
-# shellcheck disable=SC2086
-if [[ "$PIP_CMD" == "uv pip" ]]; then
-    $PIP_CMD install --system "${PACKAGE} @ git+${REPO}#subdirectory=bridge"
-else
-    $PIP_CMD install "${PACKAGE} @ git+${REPO}#subdirectory=bridge"
-fi
+case "$INSTALL_METHOD" in
+    uv)
+        uv tool install "${PACKAGE_URL}"
+        ;;
+    pipx)
+        pipx install "${PACKAGE_URL}"
+        ;;
+    pip3)
+        pip3 install --user "${PACKAGE_URL}"
+        ;;
+    pip)
+        pip install --user "${PACKAGE_URL}"
+        ;;
+esac
 
-# ── Verification ───────────────────────────────────────────────────────────────
+# ── Verification ──────────────────────────────────────────────────────────────
 
 echo ""
 echo "Verifying installation..."
+
+# uv tool and pipx put binaries in ~/.local/bin — make sure it's on PATH for this check
+export PATH="$HOME/.local/bin:$PATH"
 
 if command -v amplifier-paperclip-bridge &>/dev/null; then
     echo "  amplifier-paperclip-bridge is in PATH ✓"
@@ -113,7 +127,7 @@ else
     echo "         Try: export PATH=\"\$HOME/.local/bin:\$PATH\"" >&2
 fi
 
-# ── Next Steps ─────────────────────────────────────────────────────────────────
+# ── Next Steps ────────────────────────────────────────────────────────────────
 
 echo ""
 echo "┌─────────────────────────────────────────────────┐"

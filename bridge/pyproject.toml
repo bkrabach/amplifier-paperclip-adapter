@@ -9,7 +9,7 @@ authors = [
 ]
 dependencies = [
     "amplifier-core>=1.0.7",
-    "amplifier-foundation>=1.0.0",
+    "amplifier-foundation @ git+https://github.com/microsoft/amplifier-foundation.git",
 ]
 
 [project.scripts]
